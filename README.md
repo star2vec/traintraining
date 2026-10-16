@@ -700,7 +700,7 @@ train_tf = transforms.Compose([
 ])
 
 test_tf = transforms.Compose([               
-  transforms.Resize((IMG_SIZE, IMF SIZE)),
+  transforms.Resize((IMG_SIZE, IMG_SIZE)),
   transforms.ToTensor(),
   transforms.Normalize(mean, std),
 ])
@@ -731,6 +731,38 @@ fit_ds = ImageDataset(fit_data['path'], fit_data['y'], train_tf)
 val_ds = ImageDataset(val_data['path'], val_data['y'], test_tf) # ai grija ca aici e test_tf, nu train_tf!!
 test_ds = ImageDataset(test_data['path'], [0] * len(test_data), test_tf)   # dummy label
 ```
+
+-------------
+-------------
+-------------
+
+### SCALING + FEATURE ENGINEERING
+
+* General feature engineering stuff, exemple:
+```python
+### totals and ratios (smoothed, so no division by 0)
+data['Total'] = data['Positive'] + data['Negative']
+data['Share'] = (data['Positive']+1) / (data['Total']+2)
+
+### number of items in a list column
+data['n_genres'] = data['Genres'].str.count(',') + 1
+```
+
+* miau :3 sorry gang its late uhh scaling idk
+```python
+### fit on train only, then apply the same scaling to both
+scaler = StandardScaler()
+scaler.fit(X_clean)
+X_scaled = scaler.transform(X_clean)
+test_scaled = scaler.transform(test_clean)
+```
+<img width="830" height="490" alt="Screenshot 2026-10-17 at 00 15 00" src="https://github.com/user-attachments/assets/f5148a50-c213-4cce-ba5f-7c329e60232a" />
+
+!! in cross-validation, daca faci cu pipeline, tb sa bagi asta:
+```python
+model = Pipeline([('scale', StandardScaler()), ('model', LogisticRegression(max_iter=1000))])
+```
+
 
 
 
