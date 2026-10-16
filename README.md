@@ -1,6 +1,7 @@
 # concepte useful de stiut (very messy for now :((( 🐻 with me)
 
 -----
+-----
 
 ### IMPORTS + SETUP
 
@@ -96,6 +97,8 @@ print('Device:', DEVICE)
 ```
 
 -----
+-----
+-----
 
 ### DATA READING
 
@@ -138,8 +141,288 @@ print(len(train_data), img.size, img.mode)
 ```
 
 -----
+-----
+-----
 
 ### DATA EXPLORATION
+
+### First look: 
+```python
+print(train_data.shape, test_data.shape)
+print(train_data.head())
+train_data.info()                                     
+print(set(train_data.columns) - set(test_data.columns))
+```
+!! coloane care sunt numerical, dar sunt de type object => possible "dirty" missing values
+
+### Checking target values: 
+```python
+target = 'Price' #exemplu
+print(train_data[target].describe())    
+print(train_data[target].value_counts().head(10))
+train_data[target].hist(bins=50)  
+```
+verificam value counts pentru ca poate exista un fel de clustering (de ex aia cu 9.99 si 14.99 la prices)
+
+putem sa variam hist bins!! de obicei se pun 10 la inceput, dar asa s-ar putea sa ratam spikeurile (de ex observam usor 14.99 si 9.99 la vaoues 0-70 cu 50 bins pt ca ar veni cam 1.4 pentru fiecare)
+
+### Clase - Kfold stuff 
+
+DE COMPLETAT AICIIIISAOLHDLIAHDFLGJH
+
+ALHDFLJAHFLJH AICI AICI AICICICIALSJHRGLAJHDFG
+
+
+
+### Missing values
+```python
+print(train_data.isna().sum()) #cate missing values avem pt fiecare coloana (ca sa identificam coloanele cu missing values)
+print(test_data.isna().sum().sum()) #cate missing values avem overall pe tot tabelul
+```
+Gapsurile:
+- le lasam NaN pt HistGradientBoosting
+- le dai adress manual / cu SimpleImputer
+!! daca o coloana are FOARTE multe missing values, de cele mai multe ori the best option e sa ii dai drop si gata (inainte de a da build la X si Y)
+
+#### Dirty/undercover missing values 
+```python
+### varianta 1, restrans, whole table:
+for col in train_data.select_dtypes(exclude='number').columns:
+  as_numbers = pd.to_numeric(train_data[col], errors='coerce')
+  bad = train_data[col][as_numbers.isna() & train_data[col].notna()]
+  print(col, '| not numbers:', len(bad), 'of', len(train_data), '|', bad.value_counts().head(5).to_dict())
+
+### varianta 2, explicit, o singura coloana):
+bad = []
+for v in train_data['Age']:
+  try:
+    float(v)
+  except:
+    bad.append(v)
+print(pd.Series(bad).value_counts().head(10))
+# avem pd.series pt ca value_counts().head(10) da return la a pd Series (pe care il transformam in dict sa fie mai citibil pe ecran, asa ca il transformam inapi dupa in pd Series)
+```
+Daca:
+- aproape toate val sunt bad (non-numerical) => pb chiar e a real text column (ex Occupation)
+- putin val bad => pb avem dirt (ex "23_" sau "_")
+
+other relevant / fixing stuffsies:
+```python
+### dupa ce dai suspect la un character (ex _ in 23_):
+col = train_data['Age']
+print(col[col.astype(str).str.contains('_', regex=False)].value_counts().head(10))
+# regex fals ca sa ia acel caracter asa cum e, pt ca unele caractere sunt speciale idk
+
+### useful, tipuri:
+print(col.apply(type).value_counts())
+
+### patching stuff up & more
+data['Occupation'] = data['Occupation'].replace('_______', np.nan)
+data['Credit_Mix'] = data['Credit_Mix'].replace(['_', '!@9#%8'], np.nan)
+data['Age'] = pd.to_numeric(data['Age'].astype(str).str.strip('_'), errors='coerce')
+data.loc[(data['Age'] < 0) | (data['Age'] > 100), 'Age'] = np.nan
+data['col'] = data['col'].replace(-1, np.nan)
+
+### flagging values care erau missing!!
+data['Age_missing'] = data['Age'].isna().astype(int)
+
+### de obicei astea sunt among the most common alea care apar, ca sa vezi valorile care apar de cele mai multe ori:
+for col in train_data.columns:
+  print(col, train_data[col].value_counts().head(5).to_dict())
+
+### sa dai compare before&after:
+print(train_data['Age'].isna().sum(), data['Age'].isna().sum())  # (daca ai modificat in data)
+print(data['Age'].dtype)  # ar tb sa fie numerical / nu object sa zicem idk
+print(data['Age'].describe())
+print((data['Occupation'] == '_______').sum())  # un check mai specific
+```
+
+
+### Unique values, duplicates, etc
+```python
+print(train_data.nunique().sort_values()) #alea mai constante vor fi mai sus
+
+constant = []
+for col in train_data.columns:
+  if train_data[col].nunique() == 1:
+    constant.append(col)
+print('constant:', constant)
+
+print('duplicate rows:', train_data.duplicated().sum())
+```
+
+### Ranges, weird/impossible vals
+```python
+print(train_data.describe().T[['min', 'max', 'mean', 'std']])
+```
+!! ai grija la std
+
+
+### Train vs Test data
+```python
+for col in test_data.select_dtypes(exclude='number').columns:
+  unseen = (~test_data[col].isin(train_data[col])).mean()
+  print(col, '| test rows with a value never seen in train:', round(unseen, 3))
+
+## varianta explicita pentru unseen
+for col in test_data.select_dtypes(exclude='number').columns:
+  train_values = set(train_data[col])
+  count = 0
+  for v in test_data[col]:
+    if v not in train_values:
+      count += 1
+  unseen = count / len(test_data)
+  print(col, '| test rows with a value never seen in train:', round(unseen, 3))
+
+# alta varianta (interiorul loopului, pentru known, de ex):
+known = set(train_data['Publishers'])
+answers = []
+for v in test_data['Publishers']:
+  answers.append(v in known)
+##^^^ astea sunt pe row, deci nu individual/unique valori
+
+##---------##
+
+### acum si alea cu numere
+for col in test_data.select_dtypes('number').columns:
+  outside = ((test_data[col] > train_data[col].max()) | (test_data[col] < train_data[col].min())).mean()
+  if outside > 0:
+    print(col, '| test rows outside train range:', round(outside, 3))
+```
+!! e good practice sa dai run la acest check dupa data cleaning
+<img width="917" height="686" alt="Screenshot 2026-10-16 at 14 26 53" src="https://github.com/user-attachments/assets/df5e8127-50cc-4e42-bdd3-743faaf003db" />
+^^^ pt aia cu ce exista in train/test
+
+!! ai grija cand apar valori noi si faceai cu ordinalencoder:
+<img width="627" height="865" alt="Screenshot 2026-10-16 at 14 28 18" src="https://github.com/user-attachments/assets/74e4f26b-eb44-4e61-af7b-6fe109ceca5c" />
+
+
+### Groups 
+(nu vor fi revealed de duplicates pt ca row-urile nu sunt fully identice, au doar componente asa, in rest pb sunt very similar, de ex ac CostumerID)
+```python
+print(train_data['Customer_ID'].value_counts().head())
+print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean()) #share of test with known groups
+```
+!! daca a doua linie iese:
+- close to 0 => test are grupuri noi most likely => folosim GroupKFold
+- close to 1 => test are grupuri cunoscute => folosim stratified folds (si incercam sa dam consider la features din each other group's row??????????????????????????????????)
+
+
+### Column - target relation
+* Pentru number cols:
+```python
+print(train_data['Customer_ID'].value_counts().head())
+print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean()) #share of test with known groups
+```
+Fiecare primeste val intre -1 (opposite direction) si +1 (going up together), iar 0 e inconclusive (for example, da miss la U-shapes)
+
+* Pentru categ cols:
+```python
+print(train_data.groupby('Occupation')[target].agg(['count', 'median']))
+```
+^^^ ia fiecare valoare din coloana respectiva si afiseaza statisticile de count si median de la targetul rowurilor cu acea valoare pt coloana selectata
+!! daca medienele difera mult intre valori => coloana este relevanta!! (tho ai grija ca o mediana de la 2 rows e useless, ai grija si la countul fiecarei valori)
+
+
+```python
+exploded = train_data.assign(Genre=train_data['Genres'].str.split(',')).explode('Genre')
+print(exploded.groupby('Genre')[target].agg(['count', 'median']))
+```
+!! NU SE ANTRENEAZA PE EXPLODED !! asta e doar asa mai mult de explorare
+
+### Choosing the validation split
+```python
+print(train_data[target].value_counts(normalize=True))  # class balance??                 
+print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean())    # cate grupuri sunt shared intre test si train
+```
+!! rows in grupuri => GroupKFold / StratifiedGroupKFold
+!! clasificare => StratifiedKFold
+
+usually se fac 5 folds (maybe 3 daca training is slow)
+
+### Plots
+* Hist bins:
+```python
+train_data[target].hist(bins=50)  
+```
+* 2 feateruri, in functie de clasa:
+```python
+plt.scatter(train_data['col_a'], train_data['col_b'], c=train_data[target], s=5)
+plt.xlabel('col_a'); plt.ylabel('col_b')
+plt.show()
+```
+* c=train_data[target] - coloreaza fiecare pct in functie de cls (ex 0/rosu, 1/verde)
+* s=5 face punctele mai mici
+* pozitie across col_a, inaltime across col_b
+<img width="718" height="163" alt="Screenshot 2026-10-16 at 04 16 43" src="https://github.com/user-attachments/assets/91a5b3e2-8466-473b-80b2-95fd4386c8b8" />
+
+
+
+### Checkul dinainte de model, dupa ce am dat clean!!
+```python
+print(list(X_clean.select_dtypes(exclude='number').columns))  # ar tb sa fie []
+print(list(X_clean.columns) == list(test_clean.columns))  # ar tb sa fie true
+```
+!! NaN e ok: coloanele raman float64 daca erau numerice (doar text/other stuff transforma column typeul in object)
+
+--------
+
+### NLP exploration
+* te uiti peste date pt chestii ca scrambled words (sau scrambled letters), special tokens ca $NE$ etc
+* lungime
+```python
+train_data['text'].str.split().str.len().describe() 
+```
+^^^ informatii related de numarul de cuvinte al textului
+!! alea mai lungi poate au nevoie de chunking !!!!!!!!!!!YOOOOOOO DE VAZUT CUM FACEM ASTA!!!!
+
+-------- 
+
+### CV exploration
+
+#### Images / class
+```python
+print(train_data['label'].value_counts())
+```
+
+#### random ahh imgs
+```python
+classes = train_data['label'].unique()
+fig, axes = plt.subplots(len(classes), 5, figsize=(15, 3 * len(classes)))
+for r in range(len(classes)):
+  rows = train_data[train_data['label'] == classes[r]].sample(5, random_state=0)
+  for k in range(5):
+    axes[r, k].imshow(Image.open(rows['path'].iloc[k]))
+    axes[r, k].set_title(classes[r])
+    axes[r, k].axis('off')
+plt.show()
+```
+
+
+DE TERMINAT CV SECTION DE AICI GANG!!!!!!!
+
+
+
+-------- 
+-------- 
+-------- 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -185,6 +468,13 @@ df[col][i] = x doesn't save. Use .loc, or build a list and assign the whole colu
 
 value_counts() counts how often each distinct value appears, most frequent first. value_counts(normalize=True) gives shares instead of counts.
 
+
+
+
+
+
+
+A model trained on unbalanced data tends to ignore the rare class too. Two fixes: class_weight='balanced', which makes mistakes on the rare class count more, and tuning the decision threshold, like the cutoff in the anomaly task. IDK UNDE SE PUNE ASSTA!!!!!!
 
 
 ERORI
