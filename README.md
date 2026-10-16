@@ -166,14 +166,6 @@ verificam value counts pentru ca poate exista un fel de clustering (de ex aia cu
 
 putem sa variam hist bins!! de obicei se pun 10 la inceput, dar asa s-ar putea sa ratam spikeurile (de ex observam usor 14.99 si 9.99 la vaoues 0-70 cu 50 bins pt ca ar veni cam 1.4 pentru fiecare)
 
-### Clase - Kfold stuff 
-
-DE COMPLETAT AICIIIISAOLHDLIAHDFLGJH
-
-ALHDFLJAHFLJH AICI AICI AICICICIALSJHRGLAJHDFG
-
-
-
 ### Missing values
 ```python
 print(train_data.isna().sum()) #cate missing values avem pt fiecare coloana (ca sa identificam coloanele cu missing values)
@@ -305,14 +297,13 @@ print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean()) #share of
 ```
 !! daca a doua linie iese:
 - close to 0 => test are grupuri noi most likely => folosim GroupKFold
-- close to 1 => test are grupuri cunoscute => folosim stratified folds (si incercam sa dam consider la features din each other group's row??????????????????????????????????)
+- close to 1 => test are grupuri cunoscute => folosim stratified folds (si incercam sa dam consider la features din each other group's row)
 
 
 ### Column - target relation
 * Pentru number cols:
 ```python
-print(train_data['Customer_ID'].value_counts().head())
-print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean()) #share of test with known groups
+print(train_data.select_dtypes('number').corr(method='spearman')[target].sort_values())
 ```
 Fiecare primeste val intre -1 (opposite direction) si +1 (going up together), iar 0 e inconclusive (for example, da miss la U-shapes)
 
@@ -339,6 +330,8 @@ print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean())    # cate
 !! clasificare => StratifiedKFold
 
 usually se fac 5 folds (maybe 3 daca training is slow)
+
+IMPORTANT: "A model trained on unbalanced data tends to ignore the rare class too. Two fixes: class_weight='balanced', which makes mistakes on the rare class count more, and tuning the decision threshold, like the cutoff in the anomaly task."
 
 ### Plots
 * Hist bins:
@@ -474,7 +467,7 @@ value_counts() counts how often each distinct value appears, most frequent first
 
 
 
-A model trained on unbalanced data tends to ignore the rare class too. Two fixes: class_weight='balanced', which makes mistakes on the rare class count more, and tuning the decision threshold, like the cutoff in the anomaly task. IDK UNDE SE PUNE ASSTA!!!!!!
+
 
 
 ERORI
