@@ -3,7 +3,7 @@
 -----
 -----
 
-### IMPORTS + SETUP
+## IMPORTS + SETUP
 
 ```python
 
@@ -100,7 +100,7 @@ print('Device:', DEVICE)
 -----
 -----
 
-### DATA READING
+## DATA READING
 
 * CSV:
 ```python
@@ -144,7 +144,7 @@ print(len(train_data), img.size, img.mode)
 -----
 -----
 
-### DATA EXPLORATION
+## DATA EXPLORATION
 
 ### First look: 
 ```python
@@ -175,6 +175,7 @@ Gapsurile:
 - le lasam NaN pt HistGradientBoosting
 - le dai adress manual / cu SimpleImputer
 !! daca o coloana are FOARTE multe missing values, de cele mai multe ori the best option e sa ii dai drop si gata (inainte de a da build la X si Y)
+(desi poti sa faci schema cu flag column mai bine)
 
 #### Dirty/undercover missing values 
 ```python
@@ -189,7 +190,7 @@ bad = []
 for v in train_data['Age']:
   try:
     float(v)
-  except:
+  except ValueError:
     bad.append(v)
 print(pd.Series(bad).value_counts().head(10))
 # avem pd.series pt ca value_counts().head(10) da return la a pd Series (pe care il transformam in dict sa fie mai citibil pe ecran, asa ca il transformam inapi dupa in pd Series)
@@ -304,6 +305,11 @@ print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean()) #share of
 * Pentru number cols:
 ```python
 print(train_data.select_dtypes('number').corr(method='spearman')[target].sort_values())
+
+## sau pt fiecare coloana:
+numbers = train_data.select_dtypes('number')
+for col in numbers.columns:
+  print(col, round(numbers[col].corr(numbers[target], method='spearman'), 2))
 ```
 Fiecare primeste val intre -1 (opposite direction) si +1 (going up together), iar 0 e inconclusive (for example, da miss la U-shapes)
 
@@ -344,7 +350,7 @@ plt.scatter(train_data['col_a'], train_data['col_b'], c=train_data[target], s=5)
 plt.xlabel('col_a'); plt.ylabel('col_b')
 plt.show()
 ```
-* c=train_data[target] - coloreaza fiecare pct in functie de cls (ex 0/rosu, 1/verde)
+* c=train_data[target] - coloreaza fiecare pct in functie de cls (ex 0/rosu, 1/verde) - vezi ca are nevoie de numere!! asa ca daca e text tb mapping mai intai
 * s=5 face punctele mai mici
 * pozitie across col_a, inaltime across col_b
 <img width="718" height="163" alt="Screenshot 2026-10-16 at 04 16 43" src="https://github.com/user-attachments/assets/91a5b3e2-8466-473b-80b2-95fd4386c8b8" />
@@ -362,24 +368,62 @@ print(list(X_clean.columns) == list(test_clean.columns))  # ar tb sa fie true
 
 ### NLP exploration
 * te uiti peste date pt chestii ca scrambled words (sau scrambled letters), special tokens ca $NE$ etc
+* labels / samples
+```python
+print(train_data['label'].value_counts(normalize=True))
+
+sample = train_data.sample(5, random_state=0)
+for i in range(len(sample)):
+  print(sample['label'].iloc[i], '|', sample['text'].iloc[i])
+```
 * lungime
 ```python
-train_data['text'].str.split().str.len().describe() 
+train_data['text'].str.split().str.len().describe()
 ```
 ^^^ informatii related de numarul de cuvinte al textului
-!! alea mai lungi poate au nevoie de chunking !!!!!!!!!!!YOOOOOOO DE VAZUT CUM FACEM ASTA!!!!
+!! alea mai lungi poate au nevoie de chunking!!
+```python
+lengths = []
+for t in train_data['text']:
+  lengths.append(len(str(t).split()))
+print(pd.Series(lengths).describe())
+```
+- daca apare 0 => exista empty texts
+- peste 200 + transformer => avem nevoie de chunking
+
 
 -------- 
 
 ### CV exploration
 
-#### Images / class
+* clase, dim, modes, broken files, train vs test
 ```python
 print(train_data['label'].value_counts())
-```
 
-#### random ahh imgs
+def scan(paths):
+  sizes = {}
+  broken = 0
+  for p in paths:
+    try:
+      img = Image.open(p)
+      key = (img.size, img.mode)
+      if key not in sizes:
+        sizes[key] = 0
+      sizes[key] += 1
+    except Exception:
+      broken += 1
+  return sizes, broken
+
+print('train:', scan(train_data['path']))
+print('test: ', scan(test_data['path']))
+```
+- daca avem more sizes => dam resize la tot la una
+- mixed modes => .convert('RGB')
+- dam drop la broken files
+
+* random ahh imgs
 ```python
+## train:
 classes = train_data['label'].unique()
 fig, axes = plt.subplots(len(classes), 5, figsize=(15, 3 * len(classes)))
 for r in range(len(classes)):
@@ -389,20 +433,304 @@ for r in range(len(classes)):
     axes[r, k].set_title(classes[r])
     axes[r, k].axis('off')
 plt.show()
+
+## test:
+sample = test_data.sample(5, random_state=0)
+fig, axes = plt.subplots(1, 5, figsize=(15, 3))
+for k in range(5):
+  axes[k].imshow(Image.open(sample['path'].iloc[k]))
+  axes[k].axis('off')
+plt.show()
 ```
 
-
-DE TERMINAT CV SECTION DE AICI GANG!!!!!!!
-
-
-
 -------- 
 -------- 
 -------- 
 
+## DATA CLEANING
+
+!! 2 tipuri de cleaning:
+- row by row (converting, fixing, dropping columns): the same on train and test, inside clean_input
+- learned from data (category lists, counts, medians): computed from train only, before or after the function, never from test
+
+!! compute subtask answers on the raw data, before any cleaning
+
+### inainte de data cleaning function
+```python
+### constant columns
+constant = []
+for col in X.columns:
+  if X[col].nunique() == 1:
+    constant.append(col)
+
+### categories for one hot, without the placeholder
+occupations = []
+for v in X['Occupation'].dropna().unique():
+  if v != '_______':
+    occupations.append(v)
+
+### common items in a list column
+genre_counts = {}
+for e in X['Genres'].dropna():
+  for g in e.split(','):
+    if g not in genre_counts:
+      genre_counts[g] = 1
+    else:
+      genre_counts[g] += 1
+
+common_genres = []
+for g in genre_counts:
+  if genre_counts[g] >= 10:
+    common_genres.append(g)
+
+### rows per category, for columns with many categories
+pub_counts = X['Publishers'].value_counts()
+```
+### functie OH
+```python
+def onehot(data, col, categs):
+  for c in categs:
+    column = []
+    for v in data[col]:
+      if v == c:
+        column.append(1)
+      else:
+        column.append(0)
+    data[col+'_'+str(c)] = column
+  data = data.drop(columns=col)
+  return data
+```
+
+### functie cleaning
+```python
+def damclean(data):
+  data = data.copy()
+
+  ## daca avem dat drop la anumite coloane
+  data = data.drop(columns=['ID', 'Name'])
+  data = data.drop(columns=constant)
+
+  ## daca avem de curatat anumite valori ca sa le facem numerice
+  for f in ['Age', 'Annual_Income']:
+    data[f] = pd.to_numeric(data[f].astype(str).str.strip('_'), errors='coerce')
+
+  ## daca avem de dat replace la chestii cu NaN
+  data['Occupation'] = data['Occupation'].replace('_______', np.nan)
+  data.loc[(data['Age'] < 0) | (data['Age'] > 100), 'Age'] = np.nan
+
+  ## din range in numere (ex 20000-50000 -> 35000) 
+  mids = []
+  for e in data['Estimated owners']: 
+    mini, maxi = e.split('-')
+    mids.append((int(mini) + int(maxi)) / 2)
+  data['Estimated owners'] = mids
+
+  ## lucru cu calendar data de exemplu
+  years = []
+  for e in data['Release date']:                
+    years.append(int(e[-4:]))
+  data['Year'] = years
+  data = data.drop(columns='Release date')
+
+  ## sa dai order la text stuff!! (daca nu faci cu ordine si faci cu ordinal encoder clasic, se pun in ordine lexicografica)
+  order = {'Bad': 0, 'Standard': 1, 'Good': 2}
+  mix = []
+  for v in data['Credit_Mix']:
+    if v in order:
+      mix.append(order[v])
+    else:
+      mix.append(np.nan)                     
+  data['Credit_Mix'] = mix
+
+  ## unordered categories -> 0/1 columns
+  data = one_hot(data, 'Occupation', occupations)
+
+  ## list columns -> one 0/1 column per common item (daca apar alea multe, altfel daca sunt other sau nu, ca s anu bagam mai mult de like 10 coloane)
+  for g in common_genres:
+    column = []
+    for e in data['Genres']:
+      if g in str(e).split(','):
+        column.append(1)
+      else:
+        column.append(0)
+    data['Genre_' + g] = column
+  data = data.drop(columns='Genres')
+
+  ## un fel de ordinal encoder, dar sa luam dupa value_counts maybe??
+  counts = []
+  for v in data['Publishers']:
+    if v in pub_counts.index:
+      counts.append(pub_counts[v])
+    else:
+      counts.append(0)                       
+  data['Publishers'] = counts
+
+  return data
+```
+
+### aplica cleaningul
+```python
+X_clean = clean_input(X)
+test_clean = clean_input(test_data)
+```
+
+### missing values
+* Option 1: leave the NaN. HistGradientBoosting handles them.
+* Option 2: for models that crash on NaN: fill with the train median and add a flag column
+```python
+for col in list(X_clean.columns):
+  if X_clean[col].isna().sum()>0 or test_clean[col].isna().sum()>0:
+    median = X_clean[col].median()                          
+    X_clean[col + '_missing'] = X_clean[col].isna().astype(int)
+    test_clean[col + '_missing'] = test_clean[col].isna().astype(int)
+    X_clean[col] = X_clean[col].fillna(median)
+    test_clean[col] = test_clean[col].fillna(median)
+```
+^^^ useful functia de fillna!!!!!
+
+### final checks
+```python
+print(list(X_clean.select_dtypes(exclude='number').columns))   
+print(list(X_clean.columns) == list(test_clean.columns))       
+print(X_clean.isna().sum().sum(), test_clean.isna().sum().sum())
+```
+
+### traps
+* data[col][i] = x doesn't save. Build a list, then assign the whole column.
+* Strip before coercing, or "23_" becomes NaN instead of 23.
+* The first version can be simple: drop the columns that need hard work, submit, then add them back one at a time.
+
+---------
+
+### NLP CLEANING
+
+!! TF-IDF's default tokenizer already ignores punctuation and one-letter words. Stripping changes nothing there unless you change token_pattern.
+
+Exemplu de fct de cleaning:
+```python
+def clean_text(t, keep='!?'):
+  t = str(t).lower()
+  chars = []
+  for ch in t:
+    if ch.isalnum() or ch == ' ' or ch in keep:
+      chars.append(ch)
+    else:
+      chars.append(' ')  # punctuation becomes a space
+  t = ''.join(chars)
+  t = ' '.join(t.split()) # collapses repeated spaces
+  return t
+
+clean = []
+for t in train_data['text']:
+  clean.append(clean_text(t))
+train_data['clean'] = clean
+```
+Observatii:
+- isalnum() is True for letters and digits, including letters with accents
+- str(t) turns a missing text into 'nan', so fill missing texts with '' first.
+
+#### chunking:
+```python
+lengths = []
+for t in train_data['text']:
+  lengths.append(len(tok(str(t))['input_ids']))
+lengths = pd.Series(lengths)
+print(lengths.describe())
+print('share above 512 tokens:', (lengths > 512).mean())
+```
+```python
+def chunk_words(text, size=300, overlap=50):
+  words = str(text).split()
+  chunks = []
+  start = 0
+  while start < len(words):
+    chunks.append(' '.join(words[start:start + size]))
+    if start + size >= len(words):
+      break
+    start += size - overlap
+  return chunks
+```
+Observatii:
+- size is in words, so keep it safely under the token limit. About 300 words fits in 512 tokens.
+- overlap repeats the last 50 words of each chunk at the start of the next. A sentence cut at a boundary then appears whole in at least one chunk.
+```python
+doc_vecs = []
+for text in docs['text']:
+  chunks = chunk_words(text, size=80, overlap=20)  
+  chunk_vecs = model.encode(chunks)  # one vector per piece
+  doc_vec = chunk_vecs.mean(axis=0)  # average the pieces into one vector
+  doc_vecs.append(doc_vec)
+doc_vecs = np.array(doc_vecs)        # one row per document
+
+## make every vector length 1, so @ gives cosine similarity
+lengths = np.sqrt((doc_vecs ** 2).sum(axis=1, keepdims=True))
+doc_vecs = doc_vecs / lengths
+```
+<img width="613" height="292" alt="Screenshot 2026-10-16 at 23 29 02" src="https://github.com/user-attachments/assets/f8b56004-9604-4853-8886-773c6366ac32" />
+
+----------
+
+### CV CLEANING
+
+#### (target) Labels to numbers (pastram classes ca sa convertim dupa aceea inapoi):
+```python
+classes = sorted(train_data['label'].unique())
+class_to_id = {}
+for i in range(len(classes)):
+  class_to_id[classes[i]] = i
+
+ids = []
+for v in train_data['label']:
+  ids.append(class_to_id[v])
+train_data['y'] = ids
+```
+
+#### Preprocessing
+```python
+IMG_SIZE = 128
+mean = [0.485, 0.456, 0.406]   # ImageNet values, for pretrained models
+std = [0.229, 0.224, 0.225]    # from scratch: use the values from exploration
+
+train_tf = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.RandomHorizontalFlip(),        # augmentation: only if a flipped image keeps its label
+    transforms.RandomRotation(10),            # augmentation: random tilt up to 10 degrees
+    transforms.ToTensor(),                    # pixels 0–255 -> 0–1, shape (channels, height, width)
+    transforms.Normalize(mean, std),
+])
+
+test_tf = transforms.Compose([               
+  transforms.Resize((IMG_SIZE, IMF SIZE)),
+  transforms.ToTensor(),
+  transforms.Normalize(mean, std),
+])
+```
+^^^ e hepful sa ask ourselves daca a human would still give this image the same label
+
+<img width="630" height="407" alt="Screenshot 2026-10-16 at 23 30 06" src="https://github.com/user-attachments/assets/f5b941e4-95c3-480b-b8d4-581028589167" />
 
 
 
+#### Dataset stuff
+```python
+class ImageDataset(Dataset):
+  def __init__(self, paths, labels, tf):
+    self.paths = list(paths)
+    self.labels = list(labels)
+    self.tf = tf
+
+  def __len__(self):
+    return len(self.paths)
+
+  def __getitem__(self, i):
+    img = Image.open(self.paths[i]).convert('RGB')
+    return self.tf(img), self.labels[i]
+```
+```python
+fit_ds = ImageDataset(fit_data['path'], fit_data['y'], train_tf)
+val_ds = ImageDataset(val_data['path'], val_data['y'], test_tf) # ai grija ca aici e test_tf, nu train_tf!!
+test_ds = ImageDataset(test_data['path'], [0] * len(test_data), test_tf)   # dummy label
+```
 
 
 
