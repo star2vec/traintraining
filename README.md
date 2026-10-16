@@ -745,6 +745,7 @@ data['Total'] = data['Positive'] + data['Negative']
 data['Share'] = (data['Positive']+1) / (data['Total']+2)
 
 ### number of items in a list column
+# daca avem chestii cu NaN, tb sa le bagam cu '' mai intai idk
 data['n_genres'] = data['Genres'].str.count(',') + 1
 ```
 
@@ -753,8 +754,8 @@ data['n_genres'] = data['Genres'].str.count(',') + 1
 ### fit on train only, then apply the same scaling to both
 scaler = StandardScaler()
 scaler.fit(X_clean)
-X_scaled = scaler.transform(X_clean)
-test_scaled = scaler.transform(test_clean)
+X_scaled = pd.DataFrame(scaler.transform(X_clean), columns=X_clean.columns)
+test_scaled = pd.DataFrame(scaler.transform(test_clean), columns=X_clean.columns)
 ```
 <img width="830" height="490" alt="Screenshot 2026-10-17 at 00 15 00" src="https://github.com/user-attachments/assets/f5148a50-c213-4cce-ba5f-7c329e60232a" />
 
@@ -763,8 +764,78 @@ test_scaled = scaler.transform(test_clean)
 model = Pipeline([('scale', StandardScaler()), ('model', LogisticRegression(max_iter=1000))])
 ```
 
+-------------
+-------------
+-------------
+
+### VALIDATION
+
+<img width="789" height="518" alt="Screenshot 2026-10-17 at 00 21 11" src="https://github.com/user-attachments/assets/b5f8e668-122d-4ff6-a24d-f18cd47d4c3a" />
+
+* functia!!
+```python
+def evaluate(model, X_clean, y, kf, metric, groups=None):
+  scores = []
+  for fit_rows, val_rows in kf.split(X_clean, y, groups):
+    X_fit = X_clean.iloc[fit_rows]
+    y_fit = y.iloc[fit_rows]
+    X_val = X_clean.iloc[val_rows]
+    y_val = y.iloc[val_rows]
+
+    model.fit(X_fit, y_fit)                  
+    preds = model.predict(X_val)
+    scores.append(metric(y_val, preds))
+
+  print('folds:', [round(s, 3) for s in scores])
+  print('mean:', round(np.mean(scores), 4), ' spread:', round(np.std(scores), 4))
+  return scores
+```
+```python
+kf = StratifiedKFold(n_split=5, shuffle=True, random_state=0)
+
+scores0 = evaluate(DummyClassifier(strategy='most_frequent'), X_clean, y, kf, accuracy_score)
+scores1 = evaluate(HistGradientBoostingClassifier(random_state=0), X_clean, y, kf, accuracy_score)
+```
+!! functii mai fancy de evaluare:
+```python
+f1_weighted = lambda a, b: f1_score(a, b, average='weighted')
+evaluate(model, X_clean, y, kf, f1_weighted)
+```
+!! exemplu pt groups:
+```python
+evaluate(model, X_clean, y, GroupKFold(n_splits=5), accuracy_score, groups=train_data['Customer_ID'])
+```
 
 
+#### measuring winuri:
+```python
+wins = 0
+for i in range(len(scores1)):
+  if scores1[i] > scores0[i]:      # for errors (MAE, MSE) use <
+    wins += 1
+print('wins:', wins, 'of', len(scores1))
+```
+
+#### METRICS!!
+<img width="819" height="537" alt="Screenshot 2026-10-17 at 01 39 34" src="https://github.com/user-attachments/assets/5385feee-14be-4f7a-abed-1ef6f8cac4a3" />
+
+
+#### simple train-test split
+```python
+fit_data, val_data = train_test_split(train_data, test_size=0.2, stratify=train_data['y'], random_state=0)
+```
+^^^ fit_data si val_data care apar in ImageDataset, de exemplu
+
+
+#### Special case: NO LABELS (anomaly detection)
+```python
+cut = int(len(X) * 0.8)
+X_fit = X.iloc[:cut]
+X_val = X.iloc[cut:]
+
+## sau cu train_test_split si shuffle=False
+X_fit, X_val = train_test_split(X, test_size=0.2, shuffle=False)
+```
 
 
 
