@@ -975,26 +975,82 @@ model.fit(X_clean, y)
 preds = model.predict(test_clean)
 ```
 
+----------
+
+### NLP models
+<img width="822" height="374" alt="Screenshot 2026-10-17 at 04 49 31" src="https://github.com/user-attachments/assets/2d3d1dbb-a49d-41e6-b361-4995aab2d477" />
+
+#### Clasificare text
+
+```python
+from sklearn.svm import LinearSVC
+
+model = Pipeline([
+  ('tfidf', TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True)),
+  ('clf', LogisticRegression(C=10, max_iter=1000))])
+evaluate(model, train_data['text'], y, kf, f1_weighted)
+```
+!! varianta cu finetuning pe GPU - nu pot sa fac womp womp :(
+
+#### Matching / search (sentence embeddings)
+```python
+st = SentenceTransformer(MODEL_NAME, device='cuda')
+doc_vecs = st.encode(list(docs['text']), normalize_embeddings=True, batch_size=128)
+q_vecs = st.encode(list(queries['text']), normalize_embeddings=True)
+scores = q_vecs @ doc_vecs.T                 
+top10 = np.argsort(-scores, axis=1)[:, :10]  
+best = top10[:, 0]
+```
+
+#### TF-IDF classification
+```python
+model = Pipeline([
+  ('tfidf', TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True)),
+  ('clf', LogisticRegression(C=10, max_iter=1000))])
+evaluate(model, train_data['text'], y, kf, f1_weighted)
+```
+
+#### Similarity
+```python
+from sklearn.metrics.pairwise import cosine_similarity
+vec = TfidfVectorizer().fit(docs['text'])
+sims = cosine_similarity(vec.transform(queries['text']), vec.transform(docs['text']))
+best = sims.argmax(axis=1)         
+```
+
+#### Word2vec
+```python
+from gensim.models import Word2Vec
+sentences = [str(t).lower().split() for t in train_data['text']]
+w2v = Word2Vec(sentences, vector_size=100, window=5, min_count=2, epochs=10)
+
+def text_vec(t):
+  vecs = [w2v.wv[w] for w in str(t).lower().split() if w in w2v.wv]
+  return np.mean(vecs, axis=0) if vecs else np.zeros(100)   
+```
+
+<img width="690" height="789" alt="Screenshot 2026-10-17 at 12 24 44" src="https://github.com/user-attachments/assets/ac64e58d-e5a1-4c49-b6ef-f0c5202c7503" />
 
 
+----------
+
+### CV models
+
+<img width="826" height="363" alt="Screenshot 2026-10-17 at 04 53 15" src="https://github.com/user-attachments/assets/e18fbd24-37c8-4a45-99a6-dcd2de7ea12c" />
 
 
+#### Word2vec
+```python
+from gensim.models import Word2Vec
+sentences = [str(t).lower().split() for t in train_data['text']]
+w2v = Word2Vec(sentences, vector_size=100, window=5, min_count=2, epochs=10)
 
+def text_vec(t):
+  vecs = [w2v.wv[w] for w in str(t).lower().split() if w in w2v.wv]
+  return np.mean(vecs, axis=0) if vecs else np.zeros(100)   
+```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+<img width="709" height="901" alt="Screenshot 2026-10-17 at 12 25 38" src="https://github.com/user-attachments/assets/36ce864e-934d-4551-895d-c82cd12b9491" />
 
 
 
@@ -1013,99 +1069,3 @@ df.loc[df['Price'] > 10] is the rows where the condition holds.
 What to be careful with:
 After shuffling, filtering or dropping rows, labels no longer match positions, so [i] and .loc[i] can pick the wrong row. reset_index(drop=True) renumbers them 0, 1, 2… again.
 df[col][i] = x doesn't save. Use .loc, or build a list and assign the whole column.
-
-
-
-
-
-
-
-value_counts() counts how often each distinct value appears, most frequent first. value_counts(normalize=True) gives shares instead of counts.
-
-
-
-
-
-
-
-
-
-
-ERORI
-MAE
-MSE
-F1 (weighted + binary)
-Accuracy
-
-
-
-Data reading
-
-Aici pd read csv
-
-
-
-Data exploration
-* Missing values
-* !! disguised missing values!! (cum???)
-Number of unique values: nunique()=
-Duplicates
-de verif daca exista vals in test care nu apar in train
-Constant values
-Date in test cat si in train
-Describe (min, max, mean - pe coloane usually)
-De vazut ce data types sunt incluse acolo?? Ceva ceva dtypes???
-= sa nu uitisa verifici la final ca toate sunt numbers, perhaps?? 
-8 maybe sectiune separata pt CV?
-Tot asa pt NLP
-
-Checking for groups, and choosing what to group by
-Duplicates won't show it: a customer's monthly rows aren't identical, just alike. Instead:
-Find columns that repeat. For each ID-like column, compare nunique() with the number of rows; fewer distinct values means repeats. value_counts().head() shows rows per group.
-Check whether test shares those groups: test_data[col].isin(train_data[col]).mean().
-Close to 0: test has new groups, so use GroupKFold.
-Close to 1: test has known groups, so use plain (stratified) KF
-
-
-
-
-
-
-DATA CLEANING
-Functie de OH encoder, maybe??
-
-OrdinalEncoder (Cleaning section)
-It turns each category into a number from 0 to n−1. By default the order is alphabetical, not by meaning: Bad, Good, Standard become 0, 1, 2, which is wrong for Credit_Mix. To set the order yourself: OrdinalEncoder(categories=[['Bad', 'Standard', 'Good']]).
-A category that appears only in test crashes it, unless you pass handle_unknown='use_encoded_value', unknown_value=-1.
-
-Data visualization
-Plt work ig?? (not really necessary)
-
-SimpleImputer (Cleaning section)
-It fills each column's missing values with one value per column, learned from train.
-Setting	Options
-strategy	'mean' (the default), 'median' (safer with long tails), 'most_frequent' (works for text categories too), 'constant' (with fill_value=...)
-missing_values	What counts as missing: np.nan by default, or for example 0
-add_indicator=True	Also adds a 0/1 "was missing" column for each column that had gaps
-
-
-
-CROSS VALIDATION
-
-Stratified k fold, group k fol, k??? Idk de obicei 5
-Cand facem, cand nu facem
-
-
-
-MODELE 
-ML
-Histgradboost thingie
-
-NLP
-
-
-
-## SUBTASKS + SUBMISSION
-SUBTASKS
-Pd data frames, aia cu index
-
