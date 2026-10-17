@@ -754,8 +754,8 @@ data['n_genres'] = data['Genres'].str.count(',') + 1
 ### fit on train only, then apply the same scaling to both
 scaler = StandardScaler()
 scaler.fit(X_clean)
-X_scaled = pd.DataFrame(scaler.transform(X_clean), columns=X_clean.columns)
-test_scaled = pd.DataFrame(scaler.transform(test_clean), columns=X_clean.columns)
+X_scaled = pd.DataFrame(scaler.transform(X_clean), columns=X_clean.columns, index=X_clean.index)
+test_scaled = pd.DataFrame(scaler.transform(test_clean), columns=test_clean.columns, index=test_clean.index)
 ```
 <img width="830" height="490" alt="Screenshot 2026-10-17 at 00 15 00" src="https://github.com/user-attachments/assets/f5148a50-c213-4cce-ba5f-7c329e60232a" />
 
@@ -790,8 +790,9 @@ def evaluate(model, X_clean, y, kf, metric, groups=None):
   print('mean:', round(np.mean(scores), 4), ' spread:', round(np.std(scores), 4))
   return scores
 ```
+(vezi ca stratifiedkfold are nevoie de clase, nu putem baga pe numerical values)
 ```python
-kf = StratifiedKFold(n_split=5, shuffle=True, random_state=0)
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
 
 scores0 = evaluate(DummyClassifier(strategy='most_frequent'), X_clean, y, kf, accuracy_score)
 scores1 = evaluate(HistGradientBoostingClassifier(random_state=0), X_clean, y, kf, accuracy_score)
@@ -837,13 +838,142 @@ X_val = X.iloc[cut:]
 X_fit, X_val = train_test_split(X, test_size=0.2, shuffle=False)
 ```
 
+------------
+-----------
+-----------
+
+## MODEL
+
+### Tabular data
+
+(setup)!!
+```python
+kf = KFold(n_splits=5, shuffle=True, random_state=0)               
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)  
+```
+
+#### Dummy
+- Ignores the features, so it works on any data.
+- Regression: strategy='median' for MAE, 'mean' for MSE.
+- Classification: strategy='most_frequent'
+```python
+s0 = evaluate(DummyRegressor(strategy='median'), X_clean, y, kf, mean_absolute_error)
+```
+
+#### HistGradientBoosting
+- Needs: nothing extra (NaN is fine, no scaling)
+- PARAMETRII:
+  * loss: default 'squared_error';  'absolute_error' pt MAE. 'log_loss' pt classifier
+  * learning_rate: how big each correction step is. Default 0.1; try 0.05 and 0.2.
+  * max_iter: number of trees. Default 100; try 300 or 500, especially with a smaller learning rate.
+  * max_leaf_nodes: how complex each tree is. Default 31; try 15 and 63.
+  * class_weight: classifier only. 'balanced' makes rare classes count more.
+```python
+s1 = evaluate(HistGradientBoostingRegressor(loss='absolute_error', random_state=0), X_clean, y, kf, mean_absolute_error)
+```
 
 
+#### RandomForest
+- Needs: X_filled, no NaN. No scaling.
+- Parameters to change:
+  * n_estimators: number of trees; more is steadier but slower. Default 100; try 300.
+  * max_depth: how deep each tree goes. Default unlimited; try 10 and 20.
+  * class_weight: classifier only. 'balanced'.
+  * Always add n_jobs=-1.
+```python
+s2 = evaluate(RandomForestRegressor(n_estimators=300, n_jobs=-1, random_state=0), X_filled, y, kf, mean_absolute_error)
+```
 
 
+#### Linear models
+- Needs:
+  * X_filled, no NaN.
+  * Scaling, through the Pipeline.
+- LinearRegression: nothing to tune. The data preparation is what matters.
+- LogisticRegression parameters:
+  * C: how strictly it avoids overfitting; lower means simpler. Default 1.0; try 0.1 and 10.
+  * class_weight: 'balanced' for rare classes.
+  * max_iter: training steps. Use 1000; raise it if it warns that it didn't finish.
+```python
+## log on long-tailed columns, a separate copy just for linear models
+X_lin = X_filled.copy()
+test_lin = test_filled.copy()
+for col in ['Positive', 'Negative', 'Recommendations']:
+  X_lin[col] = np.log1p(X_lin[col])
+  test_lin[col] = np.log1p(test_lin[col])
+
+s2 = evaluate(Pipeline([('scale', StandardScaler()), ('model', LinearRegression())]))
+```
 
 
+### Tuning!!
+* 1 parameter:
+```python
+results = {}
+for lr in [0.05, 0.1, 0.2]:
+  model = HistGradientBoostingRegressor(loss='absolute_error', learning_rate=lr, random_state=0)
+  scores = evaluate(model, X_clean, y, kf, mean_absolute_error)
+  results[lr] = np.mean(scores)
 
+best = None
+for v in results:
+  if best is None or results[v] < results[best]:  # < for errors (MAE), > for accuracy or F1
+    best = v
+print('best learning_rate:', best, round(results[best], 4))
+```
+
+* 2 parameters (nested loops):
+```python
+results = {}
+for lr in [0.05, 0.1]:
+  for leaf in [20, 50]:
+    model = HistGradientBoostingRegressor(loss='absolute_error', learning_rate=lr, min_samples_leaf=leaf, random_state=0)
+    scores = evaluate(model, X_clean, y, kf, mean_absolute_error)
+    results[(lr, leaf)] = np.mean(scores)
+```
+!! Watch the cost: 2 × 2 values × 5 folds = 20 trainings. With 3 values each it's 45, so nested loops only make sense for fast models and few values.
+
+#### Reguli generale:
+* ordering:
+  * HistGradientBoosting: loss → learning_rate with max_iter → max_leaf_nodes → min_samples_leaf
+  * For random forest: min_samples_leaf → max_features → n_estimators.
+* Overfitting: if a model scores much better on its training rows than in validation, move toward simpler settings: higher min_samples_leaf, lower max_depth or max_leaf_nodes, lower C.
+
+
+### Exemple mai complete:
+* regresie:
+```python
+kf = KFold(n_splits=5, shuffle=True, random_state=0)
+
+s0 = evaluate(DummyRegressor(strategy='median'), X_clean, y, kf, mean_absolute_error)
+s1 = evaluate(HistGradientBoostingRegressor(loss='absolute_error', random_state=0), X_clean, y, kf, mean_absolute_error)
+s2 = evaluate(RandomForestRegressor(n_estimators=300, n_jobs=-1, random_state=0), X_filled, y, kf, mean_absolute_error)
+s3 = evaluate(Pipeline([('scale', StandardScaler()), ('model', LinearRegression())]), X_lin, y, kf, mean_absolute_error)
+
+## final: the best model, with its best settings, on all training rows
+model = HistGradientBoostingRegressor(loss='absolute_error', random_state=0)
+model.fit(X_clean, y)
+preds = model.predict(test_clean)
+```
+
+* classification:
+```python
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+f1_weighted = lambda a, b: f1_score(a, b, average='weighted')
+
+s0 = evaluate(DummyClassifier(strategy='most_frequent'), X_clean, y, kf, f1_weighted)
+s1 = evaluate(HistGradientBoostingClassifier(random_state=0), X_clean, y, kf, f1_weighted)
+s2 = evaluate(RandomForestClassifier(n_estimators=300, n_jobs=-1, random_state=0), X_filled, y, kf, f1_weighted)
+s3 = evaluate(Pipeline([('scale', StandardScaler()), ('model', LogisticRegression(max_iter=1000))]), X_lin, y, kf, f1_weighted)
+
+## unbalanced classes: try class_weight='balanced'
+s4 = evaluate(HistGradientBoostingClassifier(class_weight='balanced', random_state=0), X_clean, y, kf, f1_weighted)
+
+## final
+model = HistGradientBoostingClassifier(random_state=0)
+model.fit(X_clean, y)
+preds = model.predict(test_clean)
+```
 
 
 
