@@ -4,3 +4,11 @@ cred ca atunci cand cpnteaza mai mult stilul unui text in loc de meaning, trebui
 
 <img width="813" height="337" alt="Screenshot 2026-10-18 at 17 53 43" src="https://github.com/user-attachments/assets/4fbf9af4-dcb6-4258-902d-c188d25b4889" />
 
+
+
+
+
+
+la  kmneans: vezi ca ai si trucated svd (un fel de pca special)
+!! dupa truncatedsvd se aplica de obicei normalizer
+
