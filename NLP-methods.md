@@ -12,3 +12,5 @@ cred ca atunci cand cpnteaza mai mult stilul unui text in loc de meaning, trebui
 la  kmneans: vezi ca ai si trucated svd (un fel de pca special)
 !! dupa truncatedsvd se aplica de obicei normalizer
 
+DAR ai grija ca nromalizerul nu se pune inainte logisticregression sau linearsvc:
+se pune inainte de chesti ca si kmeans knn etc
