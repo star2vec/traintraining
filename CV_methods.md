@@ -24,3 +24,15 @@ def evaluate(model, val, subtask):
 
 ce inseamna torch no grad? 
 ce inseamna argmax(1)??
+
+preprocesare:
+<pre>
+    def shift(x):
+    dy, dx = np.random.randint(-2, 3, size=2)
+    return torch.roll(x, shifts=(int(dy), int(dx)), dims=(2, 3))
+</pre>
+
+
+
+
+or
