@@ -32,6 +32,8 @@ preprocesare:
     return torch.roll(x, shifts=(int(dy), int(dx)), dims=(2, 3))
 </pre>
 
+<img width="824" height="602" alt="Screenshot 2026-10-28 at 01 55 03" src="https://github.com/user-attachments/assets/07a266a5-30ee-4df7-a71e-6b11d3ebd1c8" />
+
 
 
 
