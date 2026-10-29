@@ -1,6 +1,6 @@
 !!!! DE VAZUT CUM SE ROTEST/TRANSLATEAZA IMAGINILE@!! CU UN UNGHI MAYBE???
 
-
+!! image nearest pt masti !!
 
 
 
