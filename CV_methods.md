@@ -1,3 +1,9 @@
+!!!! DE VAZUT CUM SE ROTEST/TRANSLATEAZA IMAGINILE@!! CU UN UNGHI MAYBE???
+
+
+
+
+
 de vazut alea cu measure.label??? si regionprops?? si cv blob idk
 
 
