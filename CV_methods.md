@@ -1,3 +1,6 @@
+<img width="801" height="457" alt="Screenshot 2026-10-29 at 22 03 05" src="https://github.com/user-attachments/assets/06415907-7376-4ff8-bd02-1b706d5452ba" />
+
+
 !!!! DE VAZUT CUM SE ROTEST/TRANSLATEAZA IMAGINILE@!! CU UN UNGHI MAYBE???
 
 !! image nearest pt masti !!
