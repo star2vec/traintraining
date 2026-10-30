@@ -22,3 +22,5 @@ print(pd.Series(combined).value_counts())
 data['label'] = combined
 data[['id', 'label']].to_csv('submission.csv', index=False)
 </pre>
+
+
