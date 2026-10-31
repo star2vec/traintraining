@@ -688,3 +688,39 @@ print(sub.shape); print(sub.head()); print(sub['label'].value_counts(normalize=T
 sub.to_csv('submission.csv', index=False)
 ```
 Masks as text (run-length or flattened) follow the statement's format exactly; write one, read it back, compare with the mask.
+
+-----
+
+## R. Where to find this code during the contest
+
+The appendix says documentation comes offline through DevDocs for the listed packages, plus the docs of the approved pretrained models. Two sources are always there regardless: Jupyter's own help (`skimage.measure.label?` or `help(cv2.findContours)` prints the docstring, and most sklearn, skimage, numpy and torch docstrings end with a runnable example) and `inspect.getsource(function)` for small pure Python functions. When DevDocs is missing a package, the docstring is the documentation.
+
+How to navigate DevDocs: one search box, results across all enabled packages; type the package name first to scope it (`sklearn KNeighborsClassifier`, `torch roll`, `skimage regionprops`). Each API page has the signature at the top, the parameter list, and usually an Examples section at the bottom; read the example first, the parameter list second. User guides and galleries (sklearn "User Guide", skimage "Examples") are the pages with full working snippets.
+
+| block | what to search | package / page | how useful |
+|---|---|---|---|
+| 0 load | `Image.open`, `convert`, `resize` | Pillow: Image module (docstring if not in DevDocs) | thin; the three calls above are all that is needed |
+| A flatten + KNN | `KNeighborsClassifier`, `LogisticRegression` | sklearn API: example at page bottom; User Guide "Nearest Neighbors" | good; examples run as is |
+| A crop/center | `np.where`, `any(axis=...)`, `Image.fromarray` | numpy API; Pillow | write by hand from data-types.md; nothing to copy |
+| B tensors/Dataset | `torch.from_numpy`, `permute`, `Dataset`, `DataLoader` | torch: "torch.utils.data" page has a full custom Dataset example | good for the Dataset class skeleton |
+| C augmentation (tensor) | `torch.roll`, `torch.flip`, `randn_like`, `affine_grid`, `grid_sample` | torch API | roll/flip trivial; affine_grid page has the theta explanation |
+| C augmentation (torchvision) | `transforms.Compose`, `RandomResizedCrop`, `ColorJitter`, `Normalize` | torchvision: "Transforms" page lists every transform with a one-line description | very useful; the whole train_tfm can be assembled from the list |
+| C augmentation (albumentations) | `HorizontalFlip`, `ShiftScaleRotate`, `bbox_params`, `mask` | albumentations docs: "Getting started" has image+mask and image+bboxes examples | the best source for moving masks and boxes together with the image |
+| D small CNN | `Conv2d`, `MaxPool2d`, `AdaptiveAvgPool2d`, `BatchNorm2d`, `CrossEntropyLoss` | torch.nn API; the "Training a Classifier" tutorial if tutorials are included | Conv2d page gives the output size formula; the tutorial is the full loop |
+| D training loop | `optim.Adam`, `ReduceLROnPlateau`, `state_dict`, `load_state_dict` | torch.optim, torch.nn.Module | scheduler pages have the `step(metric)` detail |
+| E resnet | `resnet18`, `weights`, `fc`, `nn.Identity` | torchvision "Models" page: pretrained weights, the normalization each expects | useful; check the expected input size and mean/std there |
+| F multi-output | `sigmoid`, `l1_loss`, `cross_entropy` | torch.nn.functional | formulas only; composition is yours |
+| G IoU/NMS | `torchvision.ops.box_iou`, `torchvision.ops.nms` | torchvision "ops" page | ready made: `box_iou(A, B)` gives `(N, M)` IoU matrix, `nms(boxes, scores, thr)` returns keep indices. Use these instead of the hand versions when allowed |
+| H threshold/components | `label`, `regionprops`, `threshold_otsu` | skimage.measure, skimage.filters; gallery "Label image regions" | very useful; the gallery example draws boxes around regions with the exact loop |
+| H cleanup | `binary_opening`, `binary_closing`, `binary_dilation`, `rotate`, `gaussian_filter` | scipy.ndimage API (docstring if not in DevDocs); skimage.morphology equivalents | parameter names only |
+| H contours/template | `findContours`, `boundingRect`, `matchTemplate`, `minMaxLoc`, `connectedComponentsWithStats` | OpenCV reference (`help(cv2.x)` if not in DevDocs) | `connectedComponentsWithStats` is the fastest "count and bbox" one-liner; `matchTemplate` docstring lists the methods |
+| H convolution | `conv2d` | torch.nn.functional | formula check only |
+| I autoencoder | `ConvTranspose2d` | torch.nn | the output size formula for upsampling |
+| J segmentation | `interpolate`, `binary_cross_entropy_with_logits`, `fcn_resnet50` | torch.nn.functional; torchvision "Models > Semantic segmentation" | the models page shows how to replace the head and read `['out']` |
+| K restoration | `np.linalg.lstsq`, `ndimage.convolve` | numpy, scipy | one call each |
+| L CLIP | `CLIPModel`, `CLIPProcessor`, `get_image_features` | transformers model docs (offline for approved models) | the model page has the exact zero-shot snippet |
+| M normalization | - | - | nothing to look up |
+
+Image processing specifically: scikit-image is the richest. Its gallery (if included) has complete examples for thresholding (Otsu, local), labeling regions, watershed for touching objects, template matching, edge detection, Hough lines (straight line detection, useful for staff lines and grids), and skeletonization. scipy.ndimage covers the same morphology with plainer functions. OpenCV docs are reference style with few examples but `cv2.connectedComponentsWithStats`, `cv2.findContours` + `cv2.boundingRect`, `cv2.matchTemplate`, `cv2.HoughLinesP`, `cv2.warpAffine` and `cv2.getRotationMatrix2D` (rotate around a center, with scale) are worth knowing by name.
+
+What to memorize anyway, because it won't be looked up fast enough: block A (flatten + KNN), the shapes in block B, `torch.roll` shift, the SmallCNN class and the training loop in D, `iou` and `nms` by hand, and threshold + `measure.label` + `regionprops` in H. Everything else is "know the function name, read its docstring".
