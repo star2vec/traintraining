@@ -3,26 +3,26 @@
 ## Idee de baza:
 beamsearch: pastram top-k answers
 
+also k = 1 => greedy
+
 ## Probleme rezolvate:
 nitro judge ai / euroai day 2 / interleaved lines:
 https://github.com/star2vec/traintraining/blob/main/probleme/nitro/euroai-day2/interleaved-lines.ipynb
 
 ## Cod:
 ```python
-def beammask(v, K=5):
-  beams = [0] # prima chestiuta
-  for e in v:
+def beammask(steps, K=5):
+  beams = [[0.0, []]]
+  for step in steps:
     cands = []
-    for b in beams:
-      cands.append(f(e, b))
-    cands.sort(key=lambda x: -x)
+    for score, choices in beams:
+      for option in options(step, choices): # optiunile de la acest pas cu ce choices
+        gain = logprob(step, choices, option)
+        cands.append([score+gain, choices+[option]])
 
-    beams = []
-    for ec in cands[:k]:
-      beams.append(ec)
-
-    best = beams[0]
-    return best
+    cands.sort(key=lambda x: -x[0])
+    beams = cands[:k]
+    return best[0][1]
 ```
 
 ## Exemplu:
