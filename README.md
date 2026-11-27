@@ -21,11 +21,6 @@ import json
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import TimeSeriesSplit
 
-from sklearn.model_selection import KFold
-from sklearn.model_selection import StratifiedKFold
-from sklearn.model_selection import GroupKFold
-from sklearn.model_selection import StratifiedGroupKFold
-
 
 ### metrics
 
@@ -290,16 +285,6 @@ for col in test_data.select_dtypes('number').columns:
 <img width="627" height="865" alt="Screenshot 2026-10-16 at 14 28 18" src="https://github.com/user-attachments/assets/74e4f26b-eb44-4e61-af7b-6fe109ceca5c" />
 
 
-### Groups 
-(nu vor fi revealed de duplicates pt ca row-urile nu sunt fully identice, au doar componente asa, in rest pb sunt very similar, de ex ac CostumerID)
-```python
-print(train_data['Customer_ID'].value_counts().head())
-print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean()) #share of test with known groups
-```
-!! daca a doua linie iese:
-- close to 0 => test are grupuri noi most likely => folosim GroupKFold
-- close to 1 => test are grupuri cunoscute => folosim stratified folds (si incercam sa dam consider la features din each other group's row)
-
 
 ### Column - target relation
 * Pentru number cols:
@@ -327,17 +312,6 @@ print(exploded.groupby('Genre')[target].agg(['count', 'median']))
 ```
 !! NU SE ANTRENEAZA PE EXPLODED !! asta e doar asa mai mult de explorare
 
-### Choosing the validation split
-```python
-print(train_data[target].value_counts(normalize=True))  # class balance??                 
-print(test_data['Customer_ID'].isin(train_data['Customer_ID']).mean())    # cate grupuri sunt shared intre test si train
-```
-!! rows in grupuri => GroupKFold / StratifiedGroupKFold
-!! clasificare => StratifiedKFold
-
-usually se fac 5 folds (maybe 3 daca training is slow)
-
-IMPORTANT: "A model trained on unbalanced data tends to ignore the rare class too. Two fixes: class_weight='balanced', which makes mistakes on the rare class count more, and tuning the decision threshold, like the cutoff in the anomaly task."
 
 ### Plots
 * Hist bins:
@@ -772,24 +746,7 @@ model = Pipeline([('scale', StandardScaler()), ('model', LogisticRegression(max_
 
 <img width="789" height="518" alt="Screenshot 2026-10-17 at 00 21 11" src="https://github.com/user-attachments/assets/b5f8e668-122d-4ff6-a24d-f18cd47d4c3a" />
 
-* functia!!
-```python
-def evaluate(model, X_clean, y, kf, metric, groups=None):
-  scores = []
-  for fit_rows, val_rows in kf.split(X_clean, y, groups):
-    X_fit = X_clean.iloc[fit_rows]
-    y_fit = y.iloc[fit_rows]
-    X_val = X_clean.iloc[val_rows]
-    y_val = y.iloc[val_rows]
 
-    model.fit(X_fit, y_fit)                  
-    preds = model.predict(X_val)
-    scores.append(metric(y_val, preds))
-
-  print('folds:', [round(s, 3) for s in scores])
-  print('mean:', round(np.mean(scores), 4), ' spread:', round(np.std(scores), 4))
-  return scores
-```
 (vezi ca stratifiedkfold are nevoie de clase, nu putem baga pe numerical values)
 ```python
 kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
