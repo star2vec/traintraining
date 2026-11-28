@@ -315,13 +315,6 @@ srt = np.sorted(S, axis=1)
 margin = str[:-1] - str[:-2]
 ```
 
-### 3.7 (nu full metoda, ceva auxiliar, dar!!) sa verificam marginul
-
-
-```python
-
-```
-
 
 
 ------
